@@ -1,7 +1,7 @@
 
 from ddgs import DDGS
 from utils.logger import logger
-from services.llm_service import run_agent
+from app.services.llm_service import run_agent
 def search_agent(topic, num_results=5):
 
     print(f"\n[SEARCH AGENT] searching for: {topic}")

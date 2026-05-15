@@ -5,7 +5,7 @@ import trafilatura
 import os
 import json
 from utils.json_utils import clean_json_response, safe_json_parse
-from services.llm_service import run_agent
+from app.services.llm_service import run_agent
 def factcheck_agent(topic, summaries):
 
     print(f"\n[FACT-CHECK AGENT] cross-referencing facts")

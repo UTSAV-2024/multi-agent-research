@@ -1,4 +1,4 @@
-from orchestrator.workflow import research
+from app.orchestrator.workflow import research
 
 
 if __name__ == "__main__":

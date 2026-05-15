@@ -10,7 +10,7 @@ client = Groq(
 def run_agent(system_prompt, user_prompt, max_tokens=1000):
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-120b",
         messages=[
             {
                 "role": "system",
@@ -26,3 +26,4 @@ def run_agent(system_prompt, user_prompt, max_tokens=1000):
     )
 
     return response.choices[0].message.content.strip()
+

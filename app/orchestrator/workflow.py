@@ -1,10 +1,10 @@
 import time
 
-from agents.search_agents import search_agent
-from agents.content_fetch_agent import content_fetch_agent
-from agents.summarizer_agent import summarizer_agent
-from agents.factcheck_agent import factcheck_agent
-from agents.report_agent import report_agent
+from app.agents.search_agents import search_agent
+from app.agents.content_fetch_agent import content_fetch_agent
+from app.agents.summarizer_agent import summarizer_agent
+from app.agents.factcheck_agent import factcheck_agent
+from app.agents.report_agent import report_agent
 
 
 def research(topic):

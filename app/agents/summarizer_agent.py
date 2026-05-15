@@ -1,5 +1,5 @@
 from utils.json_utils import clean_json_response, safe_json_parse
-from services.llm_service import run_agent
+from app.services.llm_service import run_agent
 def summarizer_agent(topic, sources):
 
     print(f"\n[SUMMARIZER AGENT] extracting key facts")
