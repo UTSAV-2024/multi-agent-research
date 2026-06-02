@@ -1,16 +1,37 @@
-from utils.json_utils import clean_json_response, safe_json_parse
+import asyncio
+import time
+
+from app.utils.json_utils import (
+    clean_json_response,
+    safe_json_parse
+)
+
 from app.services.llm_service import run_agent
-def summarizer_agent(topic, sources):
 
-    print(f"\n[SUMMARIZER AGENT] extracting key facts")
+from app.config.settings import settings
 
-    summaries = []
+from app.utils.logger import logger
 
-    for i, source in enumerate(sources):
 
-        print(f"[SUMMARIZER AGENT] processing source {i+1}/{len(sources)}")
+# ==========================================
+# NEW:
+# Async function for summarizing ONE source
+# ==========================================
 
-        prompt = f"""
+async def summarize_single_source(
+    topic,
+    source,
+    index,
+    total
+):
+
+    logger.info(
+        f"[SUMMARIZER AGENT] processing source {index+1}/{total}"
+    )
+
+    start = time.time()
+
+    prompt = f"""
 Extract the most important information about: {topic}
 
 Focus on:
@@ -39,44 +60,173 @@ Return ONLY valid JSON in this format:
 No markdown.
 No explanations.
 No code blocks.
-
-No explanations.
 """
 
-        result = run_agent(
+    try:
+
+        result = await run_agent(
+            
             "You are a precise fact extraction system. Return only valid JSON.",
+
             prompt,
-            max_tokens=500
+
+            settings.SUMMARY_MAX_TOKENS
         )
 
-        try:
+        # ==========================================
+        # Better JSON cleanup pipeline
+        # ==========================================
 
-            result = clean_json_response(result)
+        result = clean_json_response(result)
 
-            parsed = safe_json_parse(
+        parsed = safe_json_parse(
             result,
             fallback={"facts": []}
-            )
+        )
 
-            facts = parsed.get("facts", [])
-            summaries.append({
-                "source": source['title'],
-                "url": source['url'],
-                "facts": facts
-            })
+        facts = parsed.get("facts", [])
 
-        except Exception as e:
+        summary_time = round(
+            time.time() - start,
+            2
+        )
 
-            print(f"[SUMMARIZER AGENT] parsing failed: {e}")
+        logger.info(
+            f"[SUMMARIZER AGENT] completed {source['title']} in {summary_time}s"
+        )
 
-            summaries.append({
-                "source": source['title'],
-                "url": source['url'],
-                "facts": [
-                    source['content'][:300]
-                ]
-            })
+        return {
+            "source": source['title'],
+            "url": source['url'],
+            "facts": facts,
+            "summary_time": summary_time
+        }
 
-    print(f"[SUMMARIZER AGENT] extracted facts from {len(summaries)} sources")
+    except Exception as e:
+
+        logger.error(
+            f"[SUMMARIZER AGENT] failed for {source['title']} | {e}"
+        )
+
+        return {
+            "source": source['title'],
+            "url": source['url'],
+            "facts": [
+                source['content'][:300]
+            ],
+            "summary_time": 0,
+            "failed": True
+        }
+
+
+# ==========================================
+# Concurrent summarization orchestrator
+# ==========================================
+
+async def summarizer_agent_async(
+    topic,
+    sources
+):
+
+    logger.info(
+        "[SUMMARIZER AGENT] extracting key facts concurrently"
+    )
+
+    start = time.time()
+
+    # ==========================================
+    # Create concurrent summarization tasks
+    # ==========================================
+
+    tasks = [
+
+        summarize_single_source(
+            topic,
+            source,
+            index,
+            len(sources)
+        )
+
+        for index, source in enumerate(sources)
+    ]
+
+    # ==========================================
+    # Execute ALL summarizations concurrently
+    # ==========================================
+
+    summaries = await asyncio.gather(*tasks)
+
+    total_time = round(
+        time.time() - start,
+        2
+    )
+
+    logger.info(
+        f"[SUMMARIZER AGENT] completed in {total_time}s"
+    )
+
+    # ==========================================
+    # Observability metrics
+    # ==========================================
+
+    successful = [
+
+        s for s in summaries
+        if not s.get("failed")
+    ]
+
+    failed = [
+
+        s for s in summaries
+        if s.get("failed")
+    ]
+
+    logger.info(
+        f"[SUMMARIZER AGENT] successful summaries: {len(successful)}"
+    )
+
+    logger.info(
+        f"[SUMMARIZER AGENT] failed summaries: {len(failed)}"
+    )
+
+    if successful:
+
+        summary_times = [
+
+            s["summary_time"]
+            for s in successful
+        ]
+
+        avg_summary = round(
+            sum(summary_times) / len(summary_times),
+            2
+        )
+
+        slowest_summary = max(summary_times)
+
+        logger.info(
+            f"[SUMMARIZER AGENT] average summary time: {avg_summary}s"
+        )
+
+        logger.info(
+            f"[SUMMARIZER AGENT] slowest summary time: {slowest_summary}s"
+        )
 
     return summaries
+
+
+# ==========================================
+# Main sync wrapper
+# ==========================================
+
+def summarizer_agent(
+    topic,
+    sources
+):
+
+    return asyncio.run(
+        summarizer_agent_async(
+            topic,
+            sources
+        )
+    )

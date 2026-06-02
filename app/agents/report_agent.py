@@ -1,24 +1,51 @@
-import os
 import json
-from utils.json_utils import clean_json_response, safe_json_parse
-from app.services.llm_service import run_agent
-def report_agent(topic, summaries, verified_facts):
+import time
 
-    print(f"\n[REPORT AGENT] generating report")
+from app.services.llm_service import run_agent
+
+from app.config.settings import settings
+
+from app.utils.logger import logger
+
+
+# ==========================================
+# ASYNC REPORT AGENT
+# ==========================================
+
+async def report_agent(
+    topic,
+    summaries,
+    verified_facts
+):
+
+    logger.info(
+        "[REPORT AGENT] generating report"
+    )
+
+    start = time.time()
 
     confirmed = "\n".join(
         f"- {f}"
-        for f in verified_facts.get("confirmed_facts", [])
+        for f in verified_facts.get(
+            "confirmed_facts",
+            []
+        )
     )
 
     disputed = "\n".join(
         f"- {f}"
-        for f in verified_facts.get("disputed_facts", [])
+        for f in verified_facts.get(
+            "disputed_facts",
+            []
+        )
     )
 
     single = "\n".join(
         f"- {f}"
-        for f in verified_facts.get("single_source_facts", [])
+        for f in verified_facts.get(
+            "single_source_facts",
+            []
+        )
     )
 
     sources = "\n".join(
@@ -52,12 +79,22 @@ Structure:
 Be factual and concise.
 """
 
-    report = run_agent(
+    report = await run_agent(
+
         "You are a professional research analyst.",
+
         prompt,
-        max_tokens=1500
+
+        max_tokens=settings.REPORT_MAX_TOKENS
     )
 
-    print(f"[REPORT AGENT] report complete")
+    duration = round(
+        time.time() - start,
+        2
+    )
+
+    logger.info(
+        f"[REPORT AGENT] completed in {duration}s"
+    )
 
     return report

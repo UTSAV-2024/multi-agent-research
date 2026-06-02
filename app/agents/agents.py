@@ -1,18 +1,33 @@
 from groq import Groq
 from dotenv import load_dotenv
 from ddgs import DDGS
+
 import trafilatura
 import os
 import json
 import time
 
+from app.utils.logger import logger
+
+from config.settings import (
+    settings.MODEL_NAME,
+    settings.DEFAULT_MAX_TOKENS,
+    settings.TEMPERATURE,
+    settings.SUMMARY_MAX_TOKENS,
+    settings.FACTCHECK_MAX_TOKENS,
+    settings.REPORT_MAX_TOKENS
+)
+
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
 # ─────────────────────────────────────────────
 # BASE AGENT
 # ─────────────────────────────────────────────
+
 def clean_json_response(text):
 
     text = text.strip()
@@ -26,21 +41,35 @@ def clean_json_response(text):
     text = text.strip()
 
     return text
+
+
 def safe_json_parse(result, fallback=None):
 
     try:
+
         result = clean_json_response(result)
+
         return json.loads(result)
 
     except Exception as e:
 
-        print(f"[JSON ERROR] {e}")
+        logger.error(
+            f"[JSON ERROR] {e}"
+        )
 
         return fallback
-def run_agent(system_prompt, user_prompt, max_tokens=1000):
+
+
+def run_agent(
+    system_prompt,
+    user_prompt,
+    max_tokens=DEFAULT_MAX_TOKENS
+):
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+
+        model=MODEL_NAME,
+
         messages=[
             {
                 "role": "system",
@@ -51,22 +80,31 @@ def run_agent(system_prompt, user_prompt, max_tokens=1000):
                 "content": user_prompt
             }
         ],
-        temperature=0.1,
+
+        temperature=TEMPERATURE,
+
         max_tokens=max_tokens
     )
 
     return response.choices[0].message.content.strip()
 
+
 # ─────────────────────────────────────────────
 # AGENT 1 — SEARCH AGENT
 # ─────────────────────────────────────────────
+
 def search_agent(topic, num_results=5):
 
-    print(f"\n[SEARCH AGENT] searching for: {topic}")
+    logger.info(
+        f"[SEARCH AGENT] searching for: {topic}"
+    )
 
     try:
+
         with DDGS() as ddgs:
+
             results = list(
+
                 ddgs.text(
                     topic,
                     max_results=num_results
@@ -74,7 +112,11 @@ def search_agent(topic, num_results=5):
             )
 
     except Exception as e:
-        print(f"[SEARCH AGENT] error: {e}")
+
+        logger.error(
+            f"[SEARCH AGENT] error: {e}"
+        )
+
         return []
 
     sources = []
@@ -87,61 +129,89 @@ def search_agent(topic, num_results=5):
             "snippet": r.get("body", "")
         })
 
-    print(f"[SEARCH AGENT] found {len(sources)} sources")
+    logger.info(
+        f"[SEARCH AGENT] found {len(sources)} sources"
+    )
 
     return sources
+
 
 # ─────────────────────────────────────────────
 # AGENT 2 — CONTENT FETCH AGENT
 # ─────────────────────────────────────────────
+
 def content_fetch_agent(sources):
 
-    print(f"\n[CONTENT FETCH AGENT] fetching article content")
+    logger.info(
+        "[CONTENT FETCH AGENT] fetching article content"
+    )
 
     enriched_sources = []
 
     for i, source in enumerate(sources):
 
-        print(f"[CONTENT FETCH AGENT] processing {i+1}/{len(sources)}")
+        logger.info(
+            f"[CONTENT FETCH AGENT] processing "
+            f"{i+1}/{len(sources)}"
+        )
 
         try:
 
-            downloaded = trafilatura.fetch_url(source['url'])
+            downloaded = trafilatura.fetch_url(
+                source['url']
+            )
 
             if not downloaded:
                 continue
 
-            content = trafilatura.extract(downloaded)
+            content = trafilatura.extract(
+                downloaded
+            )
 
             if not content:
                 continue
 
             enriched_sources.append({
+
                 "title": source['title'],
+
                 "url": source['url'],
+
                 "content": content[:5000]
             })
 
         except Exception as e:
 
-            print(f"[CONTENT FETCH AGENT] failed: {e}")
+            logger.error(
+                f"[CONTENT FETCH AGENT] failed: {e}"
+            )
 
-    print(f"[CONTENT FETCH AGENT] fetched {len(enriched_sources)} articles")
+    logger.info(
+        f"[CONTENT FETCH AGENT] fetched "
+        f"{len(enriched_sources)} articles"
+    )
 
     return enriched_sources
+
 
 # ─────────────────────────────────────────────
 # AGENT 3 — SUMMARIZER AGENT
 # ─────────────────────────────────────────────
+
 def summarizer_agent(topic, sources):
 
-    print(f"\n[SUMMARIZER AGENT] extracting key facts")
+    logger.info(
+        "[SUMMARIZER AGENT] extracting key facts"
+    )
 
     summaries = []
 
     for i, source in enumerate(sources):
 
-        print(f"[SUMMARIZER AGENT] processing source {i+1}/{len(sources)}")
+        logger.info(
+            f"[SUMMARIZER AGENT] processing source "
+            f"{i+1}/{len(sources)}"
+        )
 
         prompt = f"""
 Extract the most important information about: {topic}
@@ -171,9 +241,12 @@ No explanations.
 """
 
         result = run_agent(
+
             "You are a precise fact extraction system. Return only valid JSON.",
+
             prompt,
-            max_tokens=500
+
+            max_tokens=SUMMARY_MAX_TOKENS
         )
 
         try:
@@ -181,38 +254,53 @@ No explanations.
             result = clean_json_response(result)
 
             facts = safe_json_parse(
-            result,
-            fallback=[]
+                result,
+                fallback=[]
             )
 
             summaries.append({
+
                 "source": source['title'],
+
                 "url": source['url'],
+
                 "facts": facts
             })
 
         except Exception as e:
 
-            print(f"[SUMMARIZER AGENT] parsing failed: {e}")
+            logger.error(
+                f"[SUMMARIZER AGENT] parsing failed: {e}"
+            )
 
             summaries.append({
+
                 "source": source['title'],
+
                 "url": source['url'],
+
                 "facts": [
                     source['content'][:300]
                 ]
             })
 
-    print(f"[SUMMARIZER AGENT] extracted facts from {len(summaries)} sources")
+    logger.info(
+        f"[SUMMARIZER AGENT] extracted facts "
+        f"from {len(summaries)} sources"
+    )
 
     return summaries
+
 
 # ─────────────────────────────────────────────
 # AGENT 4 — FACT CHECK AGENT
 # ─────────────────────────────────────────────
+
 def factcheck_agent(topic, summaries):
 
-    print(f"\n[FACT-CHECK AGENT] cross-referencing facts")
+    logger.info(
+        "[FACT-CHECK AGENT] cross-referencing facts"
+    )
 
     all_facts = []
 
@@ -248,9 +336,12 @@ Return ONLY valid JSON:
 """
 
     result = run_agent(
+
         "You are a fact-checking system.",
+
         prompt,
-        max_tokens=800
+
+        max_tokens=FACTCHECK_MAX_TOKENS
     )
 
     try:
@@ -258,55 +349,86 @@ Return ONLY valid JSON:
         result = clean_json_response(result)
 
         verified = safe_json_parse(
-                    result,
-                    fallback={
-            "confirmed_facts": [],
-            "disputed_facts": [],
-            "single_source_facts": []
+
+            result,
+
+            fallback={
+
+                "confirmed_facts": [],
+                "disputed_facts": [],
+                "single_source_facts": []
             }
         )
 
     except Exception as e:
 
-        print(f"[FACT-CHECK AGENT] parsing failed: {e}")
+        logger.error(
+            f"[FACT-CHECK AGENT] parsing failed: {e}"
+        )
 
         verified = {
+
             "confirmed_facts": [],
             "disputed_facts": [],
             "single_source_facts": []
         }
 
-    print(
+    logger.info(
         f"[FACT-CHECK AGENT] confirmed: "
         f"{len(verified.get('confirmed_facts', []))}"
     )
 
     return verified
 
+
 # ─────────────────────────────────────────────
 # AGENT 5 — REPORT AGENT
 # ─────────────────────────────────────────────
-def report_agent(topic, summaries, verified_facts):
 
-    print(f"\n[REPORT AGENT] generating report")
+def report_agent(
+    topic,
+    summaries,
+    verified_facts
+):
+
+    logger.info(
+        "[REPORT AGENT] generating report"
+    )
 
     confirmed = "\n".join(
+
         f"- {f}"
-        for f in verified_facts.get("confirmed_facts", [])
+
+        for f in verified_facts.get(
+            "confirmed_facts",
+            []
+        )
     )
 
     disputed = "\n".join(
+
         f"- {f}"
-        for f in verified_facts.get("disputed_facts", [])
+
+        for f in verified_facts.get(
+            "disputed_facts",
+            []
+        )
     )
 
     single = "\n".join(
+
         f"- {f}"
-        for f in verified_facts.get("single_source_facts", [])
+
+        for f in verified_facts.get(
+            "single_source_facts",
+            []
+        )
     )
 
     sources = "\n".join(
+
         f"- {s['source']}: {s['url']}"
+
         for s in summaries
     )
 
@@ -337,24 +459,31 @@ Be factual and concise.
 """
 
     report = run_agent(
+
         "You are a professional research analyst.",
+
         prompt,
-        max_tokens=1500
+
+        max_tokens=REPORT_MAX_TOKENS
     )
 
-    print(f"[REPORT AGENT] report complete")
+    logger.info(
+        "[REPORT AGENT] report complete"
+    )
 
     return report
+
 
 # ─────────────────────────────────────────────
 # ORCHESTRATOR
 # ─────────────────────────────────────────────
+
 def research(topic):
 
-    print(f"\n{'='*60}")
-    print("MULTI-AGENT RESEARCH SYSTEM")
-    print(f"Topic: {topic}")
-    print(f"{'='*60}")
+    logger.info("=" * 60)
+    logger.info("MULTI-AGENT RESEARCH SYSTEM")
+    logger.info(f"Topic: {topic}")
+    logger.info("=" * 60)
 
     start = time.time()
 
@@ -365,7 +494,9 @@ def research(topic):
         return "No sources found."
 
     # agent 2
-    enriched_sources = content_fetch_agent(sources)
+    enriched_sources = content_fetch_agent(
+        sources
+    )
 
     # agent 3
     summaries = summarizer_agent(
@@ -391,19 +522,29 @@ def research(topic):
         2
     )
 
-    print(f"\n{'='*60}")
-    print(f"RESEARCH COMPLETE in {elapsed}s")
-    print(f"{'='*60}\n")
+    logger.info("=" * 60)
 
-    print(report)
+    logger.info(
+        f"RESEARCH COMPLETE in {elapsed}s"
+    )
+
+    logger.info("=" * 60)
+
+    logger.info(
+        "[REPORT OUTPUT GENERATED]"
+    )
 
     return report
+
 
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
+
 if __name__ == "__main__":
 
-    topic = input("Enter research topic: ")
+    topic = input(
+        "Enter research topic: "
+    )
 
     research(topic)
