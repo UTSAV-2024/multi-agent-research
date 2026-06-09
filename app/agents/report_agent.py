@@ -40,18 +40,41 @@ async def report_agent(
         )
     )
 
-    single = "\n".join(
+    low_confidence = "\n".join(
         f"- {f}"
         for f in verified_facts.get(
-            "single_source_facts",
+            "low_confidence_facts",
             []
         )
     )
 
-    sources = "\n".join(
-        f"- {s['source']}: {s['url']}"
-        for s in summaries
-    )
+    # Extract unique source-title/URL pairs from fact entries
+    # (supports both old per-source and new aggregated summary format)
+    seen = set()
+    source_lines = []
+
+    for s in summaries:
+        # If the summary has facts with source attribution, extract from there
+        for fact_entry in s.get("facts", []):
+            if isinstance(fact_entry, dict):
+                src_title = fact_entry.get("source_title", "")
+                src_url = fact_entry.get("source_url", "")
+                if src_title and (src_title, src_url) not in seen:
+                    seen.add((src_title, src_url))
+                    source_lines.append(
+                        f"- {src_title}: {src_url}"
+                    )
+
+        # Also include the top-level source/url (backward compat)
+        src = s.get("source", "")
+        url = s.get("url", "")
+        if src and (src, url) not in seen:
+            seen.add((src, url))
+            source_lines.append(
+                f"- {src}: {url}"
+            )
+
+    sources = "\n".join(source_lines) if source_lines else "(no sources available)"
 
     prompt = f"""
 Write a professional research report on:
@@ -65,7 +88,7 @@ DISPUTED FACTS:
 {disputed if disputed else "None"}
 
 LOW CONFIDENCE FACTS:
-{single}
+{low_confidence}
 
 SOURCES:
 {sources}

@@ -29,10 +29,24 @@ async def factcheck_agent(
 
     for s in summaries:
 
-        for fact in s['facts']:
+        for fact_entry in s['facts']:
+
+            # Handle both string facts (old format) and dict facts (new format)
+            if isinstance(fact_entry, dict):
+                fact_text = fact_entry.get(
+                    "fact",
+                    str(fact_entry)
+                )
+                source_label = fact_entry.get(
+                    "source_title",
+                    s.get("source", "unknown")
+                )
+            else:
+                fact_text = str(fact_entry)
+                source_label = s.get("source", "unknown")
 
             all_facts.append(
-                f"- {fact} (source: {s['source']})"
+                f"- {fact_text} (source: {source_label})"
             )
 
     facts_text = "\n".join(all_facts)
@@ -54,7 +68,7 @@ Return ONLY valid JSON:
 {{
     "confirmed_facts": [],
     "disputed_facts": [],
-    "single_source_facts": []
+    "low_confidence_facts": []
 }}
 """
 
@@ -73,22 +87,32 @@ Return ONLY valid JSON:
             fallback={
                 "confirmed_facts": [],
                 "disputed_facts": [],
-                "single_source_facts": []
-            }
+                "low_confidence_facts": []
+            },
+            expected_type="dict"
         )
 
         # ==========================================
-        # VALIDATE KEYS: ensure all expected keys exist
+        # DIAGNOSTIC: Log parsed structure and counts
         # ==========================================
 
-        if not isinstance(verified, dict):
+        logger.info(
+            "[FACTCHECK DEBUG] parsed keys=%s",
+            list(verified.keys()) if isinstance(verified, dict) else type(verified).__name__
+        )
 
+        logger.info(
+            "[FACTCHECK DEBUG] confirmed=%s disputed=%s low=%s",
+            len(verified.get("confirmed_facts", [])),
+            len(verified.get("disputed_facts", [])),
+            len(verified.get("low_confidence_facts", [])),
+        )
+
+        if isinstance(verified, dict) and "facts" in verified:
             logger.warning(
-                "[FACT-CHECK AGENT] Response was not a dict, "
-                "falling back to single_source_facts"
+                "[FACTCHECK DEBUG] recovered data stored under 'facts' key (%s items)",
+                len(verified["facts"])
             )
-
-            raise ValueError("Response not a dict")
 
     except Exception as e:
 
@@ -96,97 +120,12 @@ Return ONLY valid JSON:
             f"[FACT-CHECK AGENT] failed | {e}"
         )
 
-        # ==========================================
-        # FALLBACK: Try to extract any facts from raw response
-        # instead of losing everything
-        # ==========================================
+        verified = {
 
-        logger.info(
-            "[FACT-CHECK AGENT] Attempting fact salvage "
-            "from raw response"
-        )
-
-        salvaged = extract_json(result)
-
-        if salvaged and isinstance(salvaged, dict):
-
-            verified = {
-                "confirmed_facts": (
-                    salvaged.get("confirmed_facts", [])
-                ),
-                "disputed_facts": (
-                    salvaged.get("disputed_facts", [])
-                ),
-                "single_source_facts": (
-                    salvaged.get("single_source_facts", [])
-                )
-            }
-
-        elif salvaged and isinstance(salvaged, list):
-
-            # Response was a list of facts — treat as single_source
-            verified = {
-                "confirmed_facts": [],
-                "disputed_facts": [],
-                "single_source_facts": (
-                    salvaged[:10]
-                )
-            }
-
-        else:
-
-            # ==========================================
-            # LAST RESORT: Extract any bullet points or
-            # numbered items from raw text
-            # ==========================================
-
-            lines = result.split("\n")
-
-            extracted = []
-
-            for line in lines:
-
-                line = line.strip()
-
-                if line.startswith("-") or line.startswith("*"):
-
-                    cleaned = line.lstrip("-* ").strip()
-
-                    if cleaned and len(cleaned) > 10:
-                        extracted.append(cleaned)
-
-                elif line and line[0].isdigit() and "." in line[:4]:
-
-                    cleaned = line.split(".", 1)[1].strip()
-
-                    if cleaned and len(cleaned) > 10:
-                        extracted.append(cleaned)
-
-            if extracted:
-
-                logger.info(
-                    f"[FACT-CHECK AGENT] Salvaged "
-                    f"{len(extracted)} facts from raw text"
-                )
-
-                verified = {
-                    "confirmed_facts": [],
-                    "disputed_facts": [],
-                    "single_source_facts": extracted
-                }
-
-            else:
-
-                logger.warning(
-                    "[FACT-CHECK AGENT] No facts could be "
-                    "salvaged from response"
-                )
-
-                verified = {
-                    "confirmed_facts": [],
-                    "disputed_facts": [],
-                    "single_source_facts": []
-                }
+            "confirmed_facts": [],
+            "disputed_facts": [],
+            "low_confidence_facts": []
+        }
 
     duration = round(
         time.time() - start,
@@ -209,7 +148,7 @@ Return ONLY valid JSON:
 
     logger.info(
         f"[FACT-CHECK AGENT] low-confidence facts: "
-        f"{len(verified.get('single_source_facts', []))}"
+        f"{len(verified.get('low_confidence_facts', []))}"
     )
 
     return verified

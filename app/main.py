@@ -14,6 +14,12 @@ from app.api.exception_handlers import (
     global_exception_handler
 )
 
+from app.services.embedding_service import (
+    get_embedding_service
+)
+
+from app.utils.logger import logger
+
 
 # =========================================================
 # FastAPI App Initialization
@@ -23,6 +29,35 @@ app = FastAPI(
     title="Multi-Agent Research Platform",
     version="1.0.0"
 )
+
+
+# =========================================================
+# Startup Initialization
+# =========================================================
+
+@app.on_event("startup")
+async def startup_load_embedding_model():
+    """
+    Pre-load the embedding model once at application startup
+    so subsequent research requests reuse the cached model
+    instead of loading it on every request.
+    """
+    import time
+    start = time.time()
+    logger.info(
+        "[EMBEDDINGS] Loading model at startup..."
+    )
+    svc = get_embedding_service()
+    elapsed = round(time.time() - start, 2)
+    logger.info(
+        "[EMBEDDINGS] Model loaded successfully"
+    )
+    logger.info(
+        f"[EMBEDDINGS] Dimension={svc.dimension}"
+    )
+    logger.info(
+        f"[EMBEDDINGS] Startup load time: {elapsed}s"
+    )
 
 
 # =========================================================

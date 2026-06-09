@@ -28,6 +28,16 @@ from app.services.chunking_service import (
     chunk_document
 )
 
+from app.services.embedding_service import (
+    get_embedding_service
+)
+
+from app.services.vector_store import (
+    VectorStore
+)
+
+from app.config.settings import settings
+
 from app.agents.search_agents import search_agent
 
 from app.agents.content_fetch_agent import (
@@ -156,6 +166,9 @@ async def research(
 
     total_chunks = 0
 
+    # Collect all per-source chunk lists for embedding stage
+    source_chunks_list = []
+
     for source in enriched_sources:
 
         chunks = chunk_document(
@@ -174,6 +187,10 @@ async def research(
 
             if stored:
                 total_chunks += stored
+                source_chunks_list.append({
+                    "source": source,
+                    "chunks": chunks,
+                })
 
     metrics["chunking_time"] = round(
         time.time() - start,
@@ -186,6 +203,60 @@ async def research(
         f"[CHUNKING] completed in "
         f"{metrics['chunking_time']}s | "
         f"created {total_chunks} chunks"
+    )
+
+    # ==========================================
+    # EMBEDDING & VECTOR STORE STAGE
+    # ==========================================
+
+    start = time.time()
+
+    logger.info(
+        "[EMBEDDING] started"
+    )
+
+    total_stored_vectors = 0
+
+    if settings.VECTOR_ENABLED and source_chunks_list:
+
+        embedding_service = get_embedding_service()
+        vector_store = VectorStore()
+        vector_store.initialize_collection()
+
+        for entry in source_chunks_list:
+
+            source = entry["source"]
+            chunks = entry["chunks"]
+
+            # Extract just the text for embedding
+            texts = [chunk["content"] for chunk in chunks]
+
+            embeddings = embedding_service.embed_texts(texts)
+
+            stored = vector_store.add_documents(
+                report_id=request_id or "unknown",
+                source_id=source["url"],
+                chunks=chunks,
+                embeddings=embeddings,
+                embedding_model=embedding_service.model_name,
+                embedding_dimension=embedding_service.dimension,
+            )
+
+            total_stored_vectors += stored
+
+        vector_store.close()
+
+    metrics["embedding_time"] = round(
+        time.time() - start,
+        2
+    )
+
+    metrics["total_vectors"] = total_stored_vectors
+
+    logger.info(
+        f"[EMBEDDING] completed in "
+        f"{metrics['embedding_time']}s | "
+        f"stored {total_stored_vectors} vectors"
     )
 
     # ==========================================
@@ -288,7 +359,7 @@ async def research(
         verified = {
             "confirmed_facts": [],
             "disputed_facts": [],
-            "single_source_facts": []
+            "low_confidence_facts": []
         }
 
     metrics["factcheck_time"] = round(

@@ -4,9 +4,12 @@ from ddgs import DDGS
 
 import trafilatura
 import os
-import json
 import time
 
+from app.utils.json_utils import (
+    clean_json_response,
+    safe_json_parse
+)
 from app.utils.logger import logger
 
 from config.settings import (
@@ -23,41 +26,6 @@ load_dotenv()
 client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
-
-# ─────────────────────────────────────────────
-# BASE AGENT
-# ─────────────────────────────────────────────
-
-def clean_json_response(text):
-
-    text = text.strip()
-
-    if text.startswith("```json"):
-        text = text.replace("```json", "")
-
-    if text.startswith("```"):
-        text = text.replace("```", "")
-
-    text = text.strip()
-
-    return text
-
-
-def safe_json_parse(result, fallback=None):
-
-    try:
-
-        result = clean_json_response(result)
-
-        return json.loads(result)
-
-    except Exception as e:
-
-        logger.error(
-            f"[JSON ERROR] {e}"
-        )
-
-        return fallback
 
 
 def run_agent(
@@ -255,7 +223,8 @@ No explanations.
 
             facts = safe_json_parse(
                 result,
-                fallback=[]
+                fallback=[],
+                expected_type="list"
             )
 
             summaries.append({
@@ -331,7 +300,7 @@ Return ONLY valid JSON:
 {{
     "confirmed_facts": [],
     "disputed_facts": [],
-    "single_source_facts": []
+    "low_confidence_facts": []
 }}
 """
 
@@ -356,8 +325,10 @@ Return ONLY valid JSON:
 
                 "confirmed_facts": [],
                 "disputed_facts": [],
-                "single_source_facts": []
-            }
+                "low_confidence_facts": []
+            },
+
+            expected_type="dict"
         )
 
     except Exception as e:
@@ -370,7 +341,7 @@ Return ONLY valid JSON:
 
             "confirmed_facts": [],
             "disputed_facts": [],
-            "single_source_facts": []
+            "low_confidence_facts": []
         }
 
     logger.info(
@@ -415,12 +386,12 @@ def report_agent(
         )
     )
 
-    single = "\n".join(
+    low_confidence = "\n".join(
 
         f"- {f}"
 
         for f in verified_facts.get(
-            "single_source_facts",
+            "low_confidence_facts",
             []
         )
     )
@@ -444,7 +415,7 @@ DISPUTED FACTS:
 {disputed if disputed else "None"}
 
 LOW CONFIDENCE FACTS:
-{single}
+{low_confidence}
 
 SOURCES:
 {sources}

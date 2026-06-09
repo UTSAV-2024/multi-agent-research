@@ -71,9 +71,23 @@ class Settings(BaseSettings):
     # VECTOR DB SETTINGS
     # ================================
 
-    VECTOR_DB: str = "chromadb"
+    VECTOR_ENABLED: bool = True
 
-    VECTOR_COLLECTION: str = "research_documents"
+    VECTOR_COLLECTION: str = "research_chunks"
+
+    CHROMA_PERSIST_DIR: str = "./chroma_data"
+
+    # ================================
+    # EMBEDDING SETTINGS
+    # ================================
+
+    EMBEDDINGS_ENABLED: bool = True
+
+    EMBEDDING_PROVIDER: str = "sentence_transformers"
+
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+
+    EMBEDDING_BATCH_SIZE: int = 32
 
     # ================================
     # GROQ
