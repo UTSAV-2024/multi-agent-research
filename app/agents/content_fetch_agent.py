@@ -1,14 +1,48 @@
 import asyncio
 import time
+
+import httpx
 import trafilatura
 
+from app.config.settings import settings
 from app.utils.logger import logger
+
+
+# ==========================================
+# SHARED HTTP CLIENT (lazy init)
+# ==========================================
+
+_client_instance = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return the shared httpx client, creating it on first call."""
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=15.0,
+                read=20.0,
+                write=10.0,
+                pool=10.0,
+            ),
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=5,
+            ),
+            follow_redirects=True,
+        )
+        logger.info(
+            "[CONTENT FETCH] Initialised httpx client "
+            "(max_connections=10, max_keepalive=5)"
+        )
+    return _client_instance
 
 
 async def fetch_single_source(
     source,
     index,
-    total
+    total,
 ):
 
     logger.info(
@@ -20,21 +54,33 @@ async def fetch_single_source(
 
     try:
 
-        downloaded = await asyncio.wait_for(
+        client = _get_http_client()
 
-            asyncio.to_thread(
-                trafilatura.fetch_url,
-                source['url']
+        response = await asyncio.wait_for(
+
+            client.get(
+                source["url"],
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                },
             ),
 
-            timeout=20
+            timeout=20,
         )
 
-        if not downloaded:
+        response.raise_for_status()
+
+        html = response.text
+
+        if not html:
 
             logger.warning(
                 f"[CONTENT FETCH AGENT] "
-                f"Failed to download: "
+                f"Empty response: "
                 f"{source['url']}"
             )
 
@@ -44,10 +90,10 @@ async def fetch_single_source(
 
             asyncio.to_thread(
                 trafilatura.extract,
-                downloaded
+                html,
             ),
 
-            timeout=20
+            timeout=20,
         )
 
         if not content:
@@ -77,10 +123,28 @@ async def fetch_single_source(
 
             "url": source['url'],
 
-            "content": content[:5000],
+            "content": content[:settings.MAX_ARTICLE_LENGTH],
 
             "fetch_time": fetch_time
         }
+
+    except httpx.HTTPStatusError as e:
+
+        logger.error(
+            f"[CONTENT FETCH AGENT] HTTP {e.response.status_code} "
+            f"for {source['url']}"
+        )
+
+        return None
+
+    except httpx.TimeoutException:
+
+        logger.error(
+            f"[CONTENT FETCH AGENT] timeout for "
+            f"{source['url']}"
+        )
+
+        return None
 
     except asyncio.TimeoutError:
 
@@ -180,3 +244,12 @@ async def content_fetch_agent_async(
     )
 
     return enriched_sources
+
+
+async def close_http_client():
+    """Close the shared httpx client (call on shutdown)."""
+    global _client_instance
+    if _client_instance is not None:
+        await _client_instance.aclose()
+        _client_instance = None
+        logger.info("[CONTENT FETCH] httpx client closed")

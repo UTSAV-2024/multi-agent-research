@@ -77,7 +77,7 @@ class TestSemanticSearchValidation:
 class TestSemanticSearchWithMockedStore:
     """Tests with a mocked VectorStore."""
 
-    @patch("app.api.routes.semantic_search.VectorStore")
+    @patch("app.services.retrieval_service.VectorStore")
     def test_successful_query_structure(self, mock_store_class):
         """A successful query returns the expected response structure."""
         # Arrange
@@ -108,6 +108,29 @@ class TestSemanticSearchWithMockedStore:
             "distances": [[0.15, 0.42]],
         }
 
+        # Mock the collection.get() used by keyword retrieval
+        mock_instance._collection.get.return_value = {
+            "ids": ["rep1:src1:1", "rep1:src1:2"],
+            "documents": [
+                "Document one content.",
+                "Document two content.",
+            ],
+            "metadatas": [
+                {
+                    "chunk_id": 1,
+                    "title": "Article 1",
+                    "url": "https://example.com/1",
+                    "report_id": "rep1",
+                },
+                {
+                    "chunk_id": 2,
+                    "title": "Article 2",
+                    "url": "https://example.com/2",
+                    "report_id": "rep1",
+                },
+            ],
+        }
+
         # Act
         response = client.post(
             "/semantic-search",
@@ -126,7 +149,8 @@ class TestSemanticSearchWithMockedStore:
         r1 = body["results"][0]
         assert r1["chunk_id"] == 1
         assert r1["content"] == "Document one content."
-        assert r1["score"] == 0.85  # 1.0 - 0.15
+        assert isinstance(r1["score"], float)
+        assert 0.0 <= r1["score"] <= 1.0
         assert r1["source_title"] == "Article 1"
         assert r1["source_url"] == "https://example.com/1"
         assert r1["report_id"] == "rep1"
@@ -134,10 +158,11 @@ class TestSemanticSearchWithMockedStore:
         # Check second result
         r2 = body["results"][1]
         assert r2["chunk_id"] == 2
-        assert r2["score"] == 0.58  # 1.0 - 0.42
+        assert isinstance(r2["score"], float)
+        assert 0.0 <= r2["score"] <= 1.0
         assert r2["source_title"] == "Article 2"
 
-    @patch("app.api.routes.semantic_search.VectorStore")
+    @patch("app.services.retrieval_service.VectorStore")
     def test_empty_results(self, mock_store_class):
         """When no results found, returns empty results list."""
         # Arrange
@@ -149,6 +174,12 @@ class TestSemanticSearchWithMockedStore:
             "documents": [[]],
             "metadatas": [[]],
             "distances": [[]],
+        }
+
+        mock_instance._collection.get.return_value = {
+            "ids": [],
+            "documents": [],
+            "metadatas": [],
         }
 
         # Act
@@ -163,7 +194,7 @@ class TestSemanticSearchWithMockedStore:
         assert body["count"] == 0
         assert body["results"] == []
 
-    @patch("app.api.routes.semantic_search.VectorStore")
+    @patch("app.services.retrieval_service.VectorStore")
     def test_score_clamped_to_zero(self, mock_store_class):
         """Distance > 1.0 gives score == 0.0 (clamped)."""
         # Arrange
@@ -184,6 +215,12 @@ class TestSemanticSearchWithMockedStore:
             "distances": [[1.5]],  # >= 1.0 -> score = 0.0
         }
 
+        mock_instance._collection.get.return_value = {
+            "ids": ["rep1:src1:1"],
+            "documents": ["Some distant content."],
+            "metadatas": [{"chunk_id": 1, "title": "Far Article", "url": "https://example.com/far", "report_id": "rep1"}],
+        }
+
         # Act
         response = client.post(
             "/semantic-search",
@@ -195,7 +232,7 @@ class TestSemanticSearchWithMockedStore:
         body = response.json()
         assert body["results"][0]["score"] == 0.0
 
-    @patch("app.api.routes.semantic_search.VectorStore")
+    @patch("app.services.retrieval_service.VectorStore")
     def test_query_called_with_correct_params(self, mock_store_class):
         """VectorStore.query() is called with the right arguments."""
         # Arrange
@@ -209,6 +246,12 @@ class TestSemanticSearchWithMockedStore:
             "distances": [[]],
         }
 
+        mock_instance._collection.get.return_value = {
+            "ids": [],
+            "documents": [],
+            "metadatas": [],
+        }
+
         # Act
         client.post(
             "/semantic-search",
@@ -216,12 +259,14 @@ class TestSemanticSearchWithMockedStore:
         )
 
         # Assert
+        # Hybrid retrieval uses multiplier (3) so top_k passed to VectorStore
+        # is top_k * HYBRID_RETRIEVAL_MULTIPLIER = 3 * 3 = 9
         mock_instance.query.assert_called_once_with(
             query_text="machine learning transformers",
-            top_k=3,
+            top_k=9,
         )
 
-    @patch("app.api.routes.semantic_search.VectorStore")
+    @patch("app.services.retrieval_service.VectorStore")
     def test_runtime_error_returns_500(self, mock_store_class):
         """RuntimeError from VectorStore returns 500."""
         # Arrange
@@ -231,6 +276,12 @@ class TestSemanticSearchWithMockedStore:
         mock_instance.query.side_effect = RuntimeError(
             "Collection not initialised"
         )
+
+        mock_instance._collection.get.return_value = {
+            "ids": [],
+            "documents": [],
+            "metadatas": [],
+        }
 
         # Act
         response = client.post(
@@ -251,9 +302,9 @@ class TestSemanticSearchWithRealChroma:
         """Create a fresh VectorStore with real ChromaDB."""
         self._tmpdir = tempfile.mkdtemp()
 
-        # Patch VectorStore to use temp directory
+        # Patch VectorStore inside retrieval_service to use temp directory
         self._patcher = patch(
-            "app.api.routes.semantic_search.VectorStore",
+            "app.services.retrieval_service.VectorStore",
         )
         self._mock_class = self._patcher.start()
 

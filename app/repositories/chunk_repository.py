@@ -28,7 +28,7 @@ async def save_chunks(
 
     chunk_docs = []
 
-    for i, chunk in enumerate(chunks):
+    for chunk in chunks:
 
         chunk_docs.append({
 
@@ -36,9 +36,17 @@ async def save_chunks(
 
             "source_url": source_url,
 
-            "chunk_index": i,
+            "chunk_id": chunk["chunk_id"],
+
+            "title": chunk.get("title", ""),
+
+            "url": chunk.get("url", ""),
 
             "content": chunk["content"],
+
+            "start": chunk.get("start", 0),
+
+            "end": chunk.get("end", 0),
 
             "created_at": datetime.utcnow()
 
@@ -64,7 +72,7 @@ async def get_chunks_by_report_id(
     cursor = (
         chunks_collection
         .find({"report_id": report_id})
-        .sort("chunk_index", 1)
+        .sort("chunk_id", 1)
     )
 
     chunks = []

@@ -13,6 +13,8 @@
 # 9. Added timeout protection
 # 10. Added async-safe execution
 #
+# Restored to last stable Groq implementation.
+#
 # ==========================================
 
 import os
@@ -20,8 +22,6 @@ import time
 import asyncio
 
 from groq import Groq
-
-from dotenv import load_dotenv
 
 from app.config.settings import settings
 
@@ -31,12 +31,23 @@ from app.utils.logger import logger
 # ==========================================
 # ENVIRONMENT SETUP
 # ==========================================
+#
+# Lazily-initialised Groq client.
+# Lazy init avoids import-time API key
+# requirement, making the module safe to
+# import in test environments.
 
-load_dotenv()
+_client_instance = None
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+
+def _get_client():
+    """Return the shared Groq async client, creating it on first call."""
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = Groq(
+            api_key=settings.GROQ_API_KEY
+        )
+    return _client_instance
 
 
 # ==========================================
@@ -66,6 +77,8 @@ async def run_agent(
             "[LLM EXECUTION] Semaphore acquired"
         )
 
+        client = _get_client()
+
         # ==========================================
         # RETRY LOOP
         # ==========================================
@@ -84,8 +97,26 @@ async def run_agent(
                 start = time.time()
 
                 # ==========================================
+                # BUILD MESSAGES
+                # ==========================================
+
+                messages = [
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    },
+                ]
+
+                # ==========================================
                 # TIMEOUT-PROTECTED API CALL
                 # ==========================================
+                #
+                # Groq SDK is synchronous, so we wrap in
+                # asyncio.to_thread for async execution.
 
                 response = await asyncio.wait_for(
 
@@ -95,20 +126,11 @@ async def run_agent(
 
                         model=settings.MODEL_NAME,
 
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": system_prompt
-                            },
-                            {
-                                "role": "user",
-                                "content": user_prompt
-                            }
-                        ],
+                        messages=messages,
 
                         temperature=settings.TEMPERATURE,
 
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
                     ),
 
                     timeout=60

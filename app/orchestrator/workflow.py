@@ -16,6 +16,7 @@
 # ==========================================
 
 import asyncio
+import re
 import time
 
 from datetime import datetime
@@ -34,6 +35,10 @@ from app.services.embedding_service import (
 
 from app.services.vector_store import (
     VectorStore
+)
+
+from app.services.evidence_service import (
+    retrieve_evidence
 )
 
 from app.config.settings import settings
@@ -329,6 +334,86 @@ async def research(
     )
 
     # ==========================================
+    # EVIDENCE RETRIEVAL
+    # ==========================================
+    #
+    # For each fact in the summaries, retrieve
+    # supporting chunk evidence using the
+    # evidence service (hybrid retrieval +
+    # source diversity enforcement).
+    #
+    # This evidence is passed to the factcheck
+    # agent for grounded verification.
+
+    ev_start = time.time()
+
+    logger.info(
+        "[EVIDENCE] retrieving evidence for facts"
+    )
+
+    ev_total = 0
+    ev_total_evidence = 0
+    ev_total_scores = []
+
+    for s in summaries:
+        enriched_facts = []
+        for fact_entry in s.get("facts", []):
+            if isinstance(fact_entry, dict):
+                fact_text = fact_entry.get("fact", "")
+                if fact_text:
+                    evidence = retrieve_evidence(
+                        fact=fact_text,
+                        top_k=3,
+                    )
+                    # Preserve backward compat: extract chunk_id + url
+                    # (the evidence dict also includes 'score' but factcheck
+                    #  only reads chunk_id and url)
+                    simplified = [
+                        {
+                            "chunk_id": ev["chunk_id"],
+                            "url": ev["url"],
+                        }
+                        for ev in evidence
+                    ]
+                    fact_entry["evidence"] = simplified
+                    ev_total += 1
+                    ev_total_evidence += len(simplified)
+                    for ev in evidence:
+                        if "score" in ev:
+                            ev_total_scores.append(ev["score"])
+                else:
+                    fact_entry["evidence"] = []
+            enriched_facts.append(fact_entry)
+        s["facts"] = enriched_facts
+
+    metrics["evidence_time"] = round(
+        time.time() - ev_start,
+        2
+    )
+    metrics["evidence_facts_processed"] = ev_total
+    metrics["evidence_retrieval_time_ms"] = round(
+        metrics["evidence_time"] * 1000,
+        2
+    )
+    metrics["total_evidence_chunks"] = ev_total_evidence
+    metrics["evidence_per_fact"] = round(
+        ev_total_evidence / ev_total,
+        2
+    ) if ev_total > 0 else 0.0
+    metrics["average_evidence_score"] = round(
+        sum(ev_total_scores) / len(ev_total_scores),
+        4
+    ) if ev_total_scores else 0.0
+
+    logger.info(
+        f"[EVIDENCE] completed in "
+        f"{metrics['evidence_time']}s | "
+        f"processed {ev_total} facts | "
+        f"retrieved {ev_total_evidence} evidence chunks | "
+        f"avg {metrics['evidence_per_fact']} ev/fact"
+    )
+
+    # ==========================================
     # FACTCHECK AGENT
     # ==========================================
 
@@ -382,9 +467,11 @@ async def research(
         "[REPORT AGENT] started"
     )
 
+    report_metrics = {}
+
     try:
 
-        report = await asyncio.wait_for(
+        report, report_metrics = await asyncio.wait_for(
 
             report_agent(
                 topic,
@@ -405,15 +492,85 @@ async def research(
             "Report generation timed out."
         )
 
+        report_metrics = {
+            "report_timeout": True
+        }
+
     metrics["report_time"] = round(
         time.time() - start,
         2
     )
 
+    # Merge hierarchical report metrics into pipeline metrics
+    for k, v in report_metrics.items():
+        metrics[k] = v
+
     logger.info(
         f"[REPORT AGENT] completed in "
         f"{metrics['report_time']}s"
     )
+
+    # ==========================================
+    # REPORT QUALITY METRICS
+    # ==========================================
+    #
+    # Non-intrusive quality measurements. All
+    # collection is wrapped in try/except so
+    # failures never affect the report output.
+
+    try:
+        # --- citation_count ---
+        # Count [1], [2], ... patterns in the report body
+        citation_matches = re.findall(r'\[(\d+)\]', report)
+        citation_count = len(set(citation_matches))
+        metrics["citation_count"] = citation_count
+
+        # --- unique_source_count ---
+        seen_urls = set()
+        for s in summaries:
+            url = s.get("url", "")
+            if url:
+                seen_urls.add(url)
+            for fe in s.get("facts", []):
+                if isinstance(fe, dict):
+                    u = fe.get("source_url", "")
+                    if u:
+                        seen_urls.add(u)
+        metrics["unique_source_count"] = len(seen_urls)
+
+        # --- average_fact_confidence ---
+        confidences = []
+        for category_key in (
+            "confirmed_facts", "disputed_facts", "low_confidence_facts"
+        ):
+            for f in verified.get(category_key, []):
+                if isinstance(f, dict):
+                    c = f.get("confidence")
+                    if c is not None and isinstance(c, (int, float)):
+                        confidences.append(float(c))
+        metrics["average_fact_confidence"] = round(
+            sum(confidences) / len(confidences), 4
+        ) if confidences else 0.0
+
+        logger.info(
+            "[METRICS] quality: "
+            "citation_count=%d | "
+            "unique_source_count=%d | "
+            "average_fact_confidence=%.4f | "
+            "evidence_per_fact=%.2f | "
+            "evidence_retrieval_time_ms=%.2f",
+            metrics.get("citation_count", 0),
+            metrics.get("unique_source_count", 0),
+            metrics.get("average_fact_confidence", 0.0),
+            metrics.get("evidence_per_fact", 0.0),
+            metrics.get("evidence_retrieval_time_ms", 0.0),
+        )
+
+    except Exception as e:
+        logger.warning(
+            "[METRICS] Failed to collect quality metrics: %s",
+            e,
+        )
 
     # ==========================================
     # FINAL PIPELINE METRICS

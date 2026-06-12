@@ -25,7 +25,7 @@ def chunk_text(
         overlap: Overlap between consecutive chunks.
 
     Returns:
-        List of dicts with chunk_id, text, start, end.
+        List of dicts with chunk_id, content, start, end.
     """
 
     if not text:
@@ -58,7 +58,7 @@ def chunk_text(
 
             "chunk_id": chunk_index + 1,
 
-            "text": chunk_text_content,
+            "content": chunk_text_content,
 
             "start": start,
 
@@ -117,7 +117,7 @@ def chunk_document(
 
             "url": document.get("url", ""),
 
-            "content": chunk["text"],
+            "content": chunk["content"],
 
             "start": chunk["start"],
 

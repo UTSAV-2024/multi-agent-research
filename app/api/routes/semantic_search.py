@@ -14,7 +14,7 @@ from app.schemas.semantic_search_schema import (
     SemanticSearchResponse,
     SemanticSearchResult,
 )
-from app.services.vector_store import VectorStore
+from app.services.retrieval_service import retrieve_chunks
 from app.utils.logger import logger
 
 
@@ -65,28 +65,12 @@ async def semantic_search(
     logger.info("[SEMANTIC SEARCH] Query received")
 
     # ------------------------------------------------------------------
-    # Initialise vector store
+    # Execute query via retrieval service
     # ------------------------------------------------------------------
 
     try:
-        vector_store = VectorStore()
-        vector_store.initialize_collection()
-    except Exception as e:
-        logger.error(
-            f"[SEMANTIC SEARCH] Failed to initialise vector store: {e}"
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Vector store initialisation failed: {e}",
-        )
-
-    # ------------------------------------------------------------------
-    # Execute query
-    # ------------------------------------------------------------------
-
-    try:
-        results = vector_store.query(
-            query_text=payload.query,
+        results = retrieve_chunks(
+            query=payload.query,
             top_k=payload.top_k,
         )
     except RuntimeError as e:
@@ -105,8 +89,6 @@ async def semantic_search(
             status_code=500,
             detail=f"Query execution failed: {e}",
         )
-    finally:
-        vector_store.close()
 
     # ------------------------------------------------------------------
     # Normalise results

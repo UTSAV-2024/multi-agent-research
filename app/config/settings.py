@@ -14,10 +14,14 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # ================================
-    # LLM SETTINGS
+    # LLM (Groq)
     # ================================
 
+    LLM_PROVIDER: str = "groq"
+
     MODEL_NAME: str = "llama-3.1-8b-instant"
+
+    GROQ_API_KEY: str
 
     TEMPERATURE: float = 0.1
 
@@ -62,6 +66,22 @@ class Settings(BaseSettings):
     DATABASE_NAME: str
 
     # ================================
+    # HYBRID RETRIEVAL SETTINGS
+    # ================================
+
+    HYBRID_SEMANTIC_WEIGHT: float = 0.7
+
+    HYBRID_KEYWORD_WEIGHT: float = 0.3
+
+    HYBRID_RETRIEVAL_MULTIPLIER: int = 3
+
+    # ================================
+    # EVIDENCE RETRIEVAL SETTINGS
+    # ================================
+
+    MAX_CHUNKS_PER_SOURCE: int = 2
+
+    # ================================
     # AUTH SETTINGS
     # ================================
 
@@ -88,12 +108,6 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
     EMBEDDING_BATCH_SIZE: int = 32
-
-    # ================================
-    # GROQ
-    # ================================
-
-    GROQ_API_KEY: str
 
     class Config:
 

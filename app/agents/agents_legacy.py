@@ -1,9 +1,7 @@
 from groq import Groq
-from dotenv import load_dotenv
 from ddgs import DDGS
 
 import trafilatura
-import os
 import time
 
 from app.utils.json_utils import (
@@ -12,46 +10,44 @@ from app.utils.json_utils import (
 )
 from app.utils.logger import logger
 
-from config.settings import (
-    settings.MODEL_NAME,
-    settings.DEFAULT_MAX_TOKENS,
-    settings.TEMPERATURE,
-    settings.SUMMARY_MAX_TOKENS,
-    settings.FACTCHECK_MAX_TOKENS,
-    settings.REPORT_MAX_TOKENS
-)
+from app.config.settings import settings
 
-load_dotenv()
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+# ==========================================
+# ENVIRONMENT SETUP
+# ==========================================
+
+_client_instance = None
+
+
+def _get_client():
+    """Return the shared Groq sync client, creating it on first call."""
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = Groq(
+            api_key=settings.GROQ_API_KEY
+        )
+    return _client_instance
 
 
 def run_agent(
     system_prompt,
     user_prompt,
-    max_tokens=DEFAULT_MAX_TOKENS
+    max_tokens=settings.DEFAULT_MAX_TOKENS
 ):
 
+    client = _get_client()
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
     response = client.chat.completions.create(
-
-        model=MODEL_NAME,
-
-        messages=[
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": user_prompt
-            }
-        ],
-
-        temperature=TEMPERATURE,
-
-        max_tokens=max_tokens
+        model=settings.MODEL_NAME,
+        messages=messages,
+        temperature=settings.TEMPERATURE,
+        max_tokens=max_tokens,
     )
 
     return response.choices[0].message.content.strip()
@@ -214,7 +210,7 @@ No explanations.
 
             prompt,
 
-            max_tokens=SUMMARY_MAX_TOKENS
+            max_tokens=settings.SUMMARY_MAX_TOKENS
         )
 
         try:
@@ -310,7 +306,7 @@ Return ONLY valid JSON:
 
         prompt,
 
-        max_tokens=FACTCHECK_MAX_TOKENS
+        max_tokens=settings.FACTCHECK_MAX_TOKENS
     )
 
     try:
@@ -435,7 +431,7 @@ Be factual and concise.
 
         prompt,
 
-        max_tokens=REPORT_MAX_TOKENS
+        max_tokens=settings.REPORT_MAX_TOKENS
     )
 
     logger.info(

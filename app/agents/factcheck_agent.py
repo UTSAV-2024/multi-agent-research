@@ -31,37 +31,43 @@ async def factcheck_agent(
 
         for fact_entry in s['facts']:
 
-            # Handle both string facts (old format) and dict facts (new format)
             if isinstance(fact_entry, dict):
-                fact_text = fact_entry.get(
-                    "fact",
-                    str(fact_entry)
-                )
+                fact_text = fact_entry.get("fact", str(fact_entry))
                 source_label = fact_entry.get(
                     "source_title",
                     s.get("source", "unknown")
                 )
+                # Extract evidence if available
+                evidence = fact_entry.get("evidence", [])
+                evidence_str = ""
+                if evidence:
+                    ev_lines = [
+                        f"  - Chunk {ev.get('chunk_id', '?')} from {ev.get('url', '')}"
+                        for ev in evidence
+                    ]
+                    evidence_str = "\nEvidence:\n" + "\n".join(ev_lines)
             else:
                 fact_text = str(fact_entry)
                 source_label = s.get("source", "unknown")
+                evidence_str = ""
 
             all_facts.append(
-                f"- {fact_text} (source: {source_label})"
+                f"- {fact_text} (source: {source_label}){evidence_str}"
             )
 
     facts_text = "\n".join(all_facts)
 
-    prompt = f"""
+    prompt = f"""\
 Topic: {topic}
 
 Facts gathered from multiple sources:
 
 {facts_text}
 
-Tasks:
-1. identify confirmed facts
-2. identify contradictions
-3. identify weak/single-source claims
+For each fact:
+1. determine if it is CONFIRMED, DISPUTED, or LOW CONFIDENCE
+2. assign a confidence score (0.0 - 1.0)
+3. include the evidence chunk references if provided
 
 Return ONLY valid JSON:
 
@@ -70,6 +76,23 @@ Return ONLY valid JSON:
     "disputed_facts": [],
     "low_confidence_facts": []
 }}
+
+Each fact should be in this format:
+{{
+    "fact": "the fact text",
+    "confidence": 0.91,
+    "evidence": [
+        {{
+            "chunk_id": 4,
+            "url": "https://..."
+        }}
+    ]
+}}
+
+If evidence is unavailable for a fact, set evidence to an empty list.
+If confidence is uncertain, set a lower value.
+
+No markdown. No explanations. No code fences.
 """
 
     try:
