@@ -1,0 +1,49 @@
+# ==========================================
+# Docker Build Context — Ignore Rules
+# ==========================================
+#
+# Keep the image lean by excluding
+# development artifacts and unnecessary files.
+#
+# ==========================================
+
+# Environment — never ship secrets
+.env
+.env.local
+.env.production
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Test artifacts
+.pytest_cache/
+tests/
+
+# Local ChromaDB persistence — use Docker volume
+chroma_data/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation and misc
+README.md
+30-day-dsa-sql-schedule.md
+PHONE-NOTIFICATIONS.md
+scripts/
+
+# Pip cache
+.pip/

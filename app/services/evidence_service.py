@@ -129,7 +129,7 @@ def retrieve_evidence(
 
         Empty list on failure or no results (graceful degradation).
     """
-    start_time = time.time()
+    start_time = time.perf_counter()
     logger.info(
         "[EVIDENCE] retrieve_evidence fact='%s...' top_k=%d",
         fact[:60],
@@ -204,7 +204,7 @@ def retrieve_evidence(
                     "score": item["score"],
                 })
 
-        elapsed = round((time.time() - start_time) * 1000, 2)
+        elapsed = round((time.perf_counter() - start_time) * 1000, 2)
         logger.info(
             "[EVIDENCE] retrieve_evidence returned %d items "
             "in %.2fms",

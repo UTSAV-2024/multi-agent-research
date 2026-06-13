@@ -164,7 +164,7 @@ class RetrievalEvaluator:
             k,
         )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             result = self.retrieval_fn(query=query, top_k=k)
@@ -189,7 +189,7 @@ class RetrievalEvaluator:
             )
 
         elapsed_ms = round(
-            (time.time() - start_time) * 1000, 2
+            (time.perf_counter() - start_time) * 1000, 2
         )
 
         # --- Parse the ChromaDB-style return ---

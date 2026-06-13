@@ -1,0 +1,81 @@
+# ==========================================
+# Multi-Agent Research Platform — Docker Compose
+# ==========================================
+#
+# Services:
+#   api     — FastAPI application (with embedded ChromaDB)
+#   mongo   — MongoDB 7 (official image with healthcheck)
+#
+# Volumes:
+#   mongodb_data  — persists MongoDB documents across restarts
+#   chroma_data   — persists embedded ChromaDB vector index
+#
+# Usage:
+#   docker compose up --build
+#   docker compose down
+#
+# ==========================================
+
+version: "3.9"
+
+services:
+
+  # ==========================================
+  # API Service
+  # ==========================================
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:?error}
+      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_NAME=${DATABASE_NAME:-multi_agent_platform}
+      - CHROMA_PERSIST_DIR=/app/chroma_data
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - chroma_data:/app/chroma_data
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==========================================
+  # MongoDB Service
+  # ==========================================
+
+  mongo:
+    image: mongo:7
+    container_name: multi-agent-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+# ==========================================
+# Named Volumes
+# ==========================================
+
+volumes:
+  mongodb_data:
+    driver: local
+  chroma_data:
+    driver: local

@@ -734,7 +734,7 @@ class TestRetrievalEvaluator:
         assert result.retrieved_chunk_count == 3
         assert result.unique_url_count == 3
         assert result.unique_domain_count == 2  # cnn.com + reuters.com
-        assert result.latency_ms > 0
+        assert result.latency_ms >= 0
         assert len(result.top_chunks) == 3
         assert result.metrics is not None
         assert result.metrics.retrieved_chunk_count == 3

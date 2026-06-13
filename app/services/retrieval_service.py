@@ -206,7 +206,7 @@ def retrieve_chunks(
             ids, distances, metadatas, documents
         (Backward-compatible shape for the semantic search endpoint.)
     """
-    start_time = time.time()
+    start_time = time.perf_counter()
     logger.info(f"[RETRIEVAL] Hybrid query='{query[:50]}...' top_k={top_k}")
 
     multiplier = settings.HYBRID_RETRIEVAL_MULTIPLIER
@@ -219,12 +219,12 @@ def retrieve_chunks(
         # ----------------------------------------------------------
         # 1. Semantic retrieval
         # ----------------------------------------------------------
-        sem_start = time.time()
+        sem_start = time.perf_counter()
         semantic_raw = vector_store.query(
             query_text=query,
             top_k=semantic_top_k,
         )
-        sem_time = round((time.time() - sem_start) * 1000, 2)
+        sem_time = round((time.perf_counter() - sem_start) * 1000, 2)
 
         sem_ids = semantic_raw.get("ids", [[]])[0]
         sem_docs = semantic_raw.get("documents", [[]])[0]
@@ -252,7 +252,7 @@ def retrieve_chunks(
         # ----------------------------------------------------------
         # 2. Keyword retrieval
         # ----------------------------------------------------------
-        kw_start = time.time()
+        kw_start = time.perf_counter()
 
         # Get all documents from ChromaDB for keyword scoring
         all_data = vector_store._collection.get()
@@ -280,7 +280,7 @@ def retrieve_chunks(
                 "metadata": all_metas[i] if i < len(all_metas) else {},
             })
 
-        kw_time = round((time.time() - kw_start) * 1000, 2)
+        kw_time = round((time.perf_counter() - kw_start) * 1000, 2)
         keyword_count = len(keyword_results)
 
         # Count how many keyword results have a non-zero score
@@ -293,11 +293,11 @@ def retrieve_chunks(
         # ----------------------------------------------------------
         # 3. Merge, deduplicate, rerank
         # ----------------------------------------------------------
-        merge_start = time.time()
+        merge_start = time.perf_counter()
         final_results = _merge_and_rerank(
             semantic_results, keyword_results, top_k
         )
-        merge_time = round((time.time() - merge_start) * 1000, 2)
+        merge_time = round((time.perf_counter() - merge_start) * 1000, 2)
         merged_count = len(final_results)
 
         # Unique source count
@@ -311,7 +311,7 @@ def retrieve_chunks(
         # ----------------------------------------------------------
         # 4. Metrics logging
         # ----------------------------------------------------------
-        total_time = round((time.time() - start_time) * 1000, 2)
+        total_time = round((time.perf_counter() - start_time) * 1000, 2)
         logger.info(
             f"[RETRIEVAL] Full report: "
             f"retrieval_time_ms={total_time} | "

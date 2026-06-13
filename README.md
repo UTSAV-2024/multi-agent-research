@@ -1,216 +1,377 @@
-# Multi-Agent Research System
+# Multi-Agent Research Platform
 
-A modular multi-agent AI research pipeline that performs:
-- web search
-- article retrieval
-- content chunking
-- fact extraction
-- cross-source verification
-- report generation
-
-The system is designed using a service-oriented modular architecture to simulate real-world AI backend systems.
+An evidence-backed, production-oriented multi-agent research system that autonomously searches the web, retrieves and verifies information across sources, generates grounded reports with deterministic citations, and continuously evaluates retrieval and evidence quality.
 
 ---
 
-# Architecture
+## Overview
 
-## Current Pipeline
+The Multi-Agent Research Platform is designed to simulate how modern AI research systems operate in production environments.
 
-```
+Given a user query, the platform:
+
+* Searches the web for relevant sources
+* Extracts article content
+* Chunks and persists information
+* Generates embeddings and stores them in a vector database
+* Retrieves evidence using hybrid retrieval
+* Verifies facts across sources
+* Produces grounded reports with deterministic citations
+* Evaluates retrieval quality and evidence quality using benchmark suites
+* Persists evaluation results for historical analysis
+
+The goal of this project is not simply to build a RAG application, but to demonstrate strong software engineering practices around reliability, observability, evaluation, and maintainability.
+
+---
+
+# System Architecture
+
+```text
 User Query
-   ↓
-Search Agent            — DuckDuckGo search
-   ↓
-Content Fetch Agent     — Trafilatura article extraction
-   ↓
-Chunking Pipeline       — Overlapping text chunks → MongoDB
-   ↓
-Summarizer Agent        — LLM fact extraction from source content
-   ↓
-Fact-Check Agent        — Cross-source verification
-   ↓
-Report Agent            — Final research report generation
-   ↓
-API Response
-```
-
-## Directory Structure
-
-```
-multi-agent-research/
-│
-├── agents/
-│   ├── search_agent.py
-│   ├── content_fetch_agent.py
-│   ├── summarizer_agent.py
-│   ├── factcheck_agent.py
-│   └── report_agent.py
-│
-├── api/
-│   ├── routes/
-│   │   ├── health.py
-│   │   ├── research.py
-│   │   ├── history.py
-│   │   └── reports.py
-│   └── router.py
-│
-├── config/
-│   └── settings.py
-│
-├── db/
-│   ├── collections/
-│   │   ├── reports_collection.py
-│   │   └── chunks_collection.py
-│   ├── database.py
-│   └── mongodb.py
-│
-├── middleware/
-│   ├── request_id.py
-│   ├── request_logging.py
-│   └── request_timing.py
-│
-├── orchestrator/
-│   └── workflow.py
-│
-├── repositories/
-│   ├── report_repository.py
-│   └── chunk_repository.py
-│
-├── schemas/
-│   └── research_schema.py
-│
-├── services/
-│   ├── llm_service.py
-│   ├── chunking_service.py
-│   └── embedding_service.py
-│
-├── utils/
-│   ├── response_builder.py
-│   ├── json_utils.py
-│   ├── exceptions.py
-│   └── logger.py
-│
-├── tests/
-│   ├── test_health.py
-│   ├── test_research.py
-│   ├── test_history.py
-│   └── test_reports.py
-│
-├── main.py
-├── requirements.txt
-└── .env
+    ↓
+FastAPI API Layer
+    ↓
+Workflow Orchestrator
+    ↓
+Search Agent
+    ↓
+Content Fetch Agent
+    ↓
+Chunking Pipeline
+    ↓
+Embedding Service
+    ↓
+MongoDB Persistence
+    ↓
+ChromaDB Vector Store
+    ↓
+Hybrid Retrieval
+    ↓
+Evidence Service
+    ↓
+Evidence-Based Factchecking
+    ↓
+Deterministic Citations
+    ↓
+Hierarchical Report Generation
+    ↓
+Grounded Research Report
 ```
 
 ---
 
-# Features
+# Key Features
 
-- Multi-agent orchestration
-- Web search using DuckDuckGo
-- Full article content extraction (Trafilatura)
-- Overlapping content chunking (foundation for retrieval)
-- Structured JSON-based fact extraction
-- Cross-source fact verification
-- Automated research report generation
-- Modular backend architecture (FastAPI)
-- MongoDB persistence (reports & chunks)
-- Logging system
-- Fault-tolerant JSON parsing
-- Paginated history API
-- Report detail & delete APIs
+## Multi-Agent Research Pipeline
+
+* Automated web research workflow
+* Modular agent orchestration
+* Concurrent execution support
+* Graceful degradation during failures
 
 ---
 
-# Chunk Flow
+## Retrieval-Augmented Generation (RAG)
 
-After content is fetched from web sources, it passes through the chunking pipeline:
-
-1. **Input**: Raw article text (up to ~5000 chars per source)
-2. **Chunking**: `chunk_text()` splits text into overlapping segments (500 char chunks, 100 char overlap)
-3. **Storage**: Each chunk saved to `chunks` MongoDB collection
-4. **Downstream**: Summarizer agent uses original source content
-
----
-
-# Embedding Flow (Planned)
-
-1. Each stored chunk will be embedded into a vector
-2. ChromaDB will store chunk_id → vector mappings
-3. Queries will be matched against stored vectors
-4. Top-K chunks used as summarizer context
+* ChromaDB-backed vector retrieval
+* Hybrid retrieval (semantic + keyword)
+* Stable chunk identifiers
+* Deterministic ranking
+* Source deduplication
+* Domain diversity tracking
 
 ---
 
-# Vector Search Plan
+## Evidence-Based Fact Verification
 
-1. Integrate ChromaDB
-2. Implement `EmbeddingService` with a concrete model
-3. Add embedding step to chunking pipeline
-4. Create vector search endpoint
-5. Use retrieved chunks as augmented context
+* Cross-source evidence retrieval
+* Evidence-supported fact checking
+* Confidence scoring
+* Supporting evidence attribution
+* Citation generation
+
+---
+
+## Deterministic Citations
+
+* Code-generated citations
+* Stable ordering
+* Deduplicated references
+* Source traceability
+
+---
+
+## Hierarchical Report Generation
+
+Reports are generated through independent sections:
+
+* Executive Summary
+* Key Findings
+* Evidence Analysis
+* Limitations & Uncertainty
+* Sources & Citations
+
+Partial failures do not terminate report generation.
+
+---
+
+## Evaluation Infrastructure
+
+### Retrieval Evaluation
+
+Measures:
+
+* Retrieval latency
+* Chunk counts
+* URL diversity
+* Domain diversity
+* Hybrid retrieval scores
+* Stability metrics
+* Jaccard similarity
+
+Benchmark dataset:
+
+* 35 benchmark queries
+* 5 failure scenarios
+
+---
+
+### Evidence Evaluation
+
+Measures:
+
+* Support ratios
+* Coverage scores
+* Evidence-per-fact ratios
+* Citation counts
+* Confidence distributions
+* Source diversity
+
+---
+
+### Historical Evaluation Tracking
+
+Evaluation results are persisted for trend analysis.
+
+Supported capabilities:
+
+* Evaluation history
+* Pagination
+* Benchmark persistence
+* Future dashboard support
 
 ---
 
 # API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Root status |
-| GET | `/health` | Health check |
-| POST | `/research` | Run research pipeline |
-| GET | `/history` | Paginated report history |
-| GET | `/reports/{id}` | Get report by ID |
-| DELETE | `/reports/{id}` | Delete report |
+## Research
+
+| Method | Endpoint        | Description                   |
+| ------ | --------------- | ----------------------------- |
+| POST   | `/research`     | Execute the research workflow |
+| GET    | `/history`      | Retrieve report history       |
+| GET    | `/reports/{id}` | Get report details            |
+| DELETE | `/reports/{id}` | Delete a report               |
 
 ---
 
-# Tech Stack
+## Evaluation
 
-- **Python** 3.14
-- **FastAPI** — Web framework
-- **MongoDB** (Motor) — Primary data store
-- **Groq API** — LLM inference
-- **Llama 3.1** — Default model
-- **DuckDuckGo Search** (DDGS) — Web search
-- **Trafilatura** — Article extraction
-- **Pytest** — Testing
+| Method | Endpoint                     | Description                 |
+| ------ | ---------------------------- | --------------------------- |
+| POST   | `/api/v1/evaluate/retrieval` | Run retrieval benchmarks    |
+| POST   | `/api/v1/evaluate/evidence`  | Evaluate evidence quality   |
+| GET    | `/api/v1/evaluate/history`   | Retrieve evaluation history |
+| GET    | `/api/v1/evaluate/summary`   | System evaluation snapshot  |
 
 ---
 
-# Key Engineering Concepts
+## Health
 
-- Agent orchestration
-- Retrieval pipelines
-- Structured outputs
-- Fault tolerance
-- Service-oriented architecture
-- Logging systems
-- JSON reliability handling
-- Content chunking
-- Embedding service abstraction
-- Repository pattern
+| Method | Endpoint  | Description  |
+| ------ | --------- | ------------ |
+| GET    | `/health` | Health check |
+| GET    | `/`       | Root status  |
 
 ---
 
-# Run Locally
+# Technology Stack
 
+### Backend
+
+* Python 3.14
+* FastAPI
+* Uvicorn
+
+### Datastores
+
+* MongoDB
+* ChromaDB
+
+### AI & Retrieval
+
+* Groq API
+* Llama Models
+* Sentence Transformers
+* Hybrid Retrieval
+
+### Web Intelligence
+
+* DDGS (DuckDuckGo Search)
+* Trafilatura
+
+### Testing
+
+* Pytest
+
+---
+
+# Engineering Highlights
+
+* Service-oriented architecture
+* Repository pattern
+* Modular agent design
+* Dependency injection
+* Request ID propagation
+* Structured logging
+* Fault tolerance
+* Retry mechanisms
+* Timeout handling
+* Graceful degradation
+* Evaluation-driven development
+* Historical benchmarking
+
+---
+
+# Testing
+
+Current automated test status:
+
+```text
+392 passing tests
 ```
+
+Coverage includes:
+
+* API endpoints
+* Retrieval services
+* Evidence services
+* Evaluation frameworks
+* Persistence layers
+* Failure scenarios
+* Timeout handling
+* Historical evaluation
+* Report generation
+
+Run tests:
+
+```bash
+pytest
+```
+
+---
+
+# Running Locally
+
+## Prerequisites
+
+* Python 3.14+
+* MongoDB
+* Docker (recommended)
+* Groq API Key
+
+---
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone <repository-url>
+cd multi-agent-research
+```
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-Create `.env`:
-```
+Create a `.env` file:
+
+```env
 GROQ_API_KEY=your_api_key
 MONGODB_URL=mongodb://localhost:27017
 DATABASE_NAME=multi_agent_platform
+CHROMA_PERSIST_DIR=./chroma_data
 ```
+
+Start the application:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+---
+
+# Docker Support
+
+Docker Compose support is included.
 
 Run:
-```
-python -m uvicorn app.main:app --reload
+
+```bash
+docker compose build
+docker compose up
 ```
 
-Run tests:
-```
-python -m pytest tests/ -v
-```
+The platform automatically provisions:
+
+* FastAPI application
+* MongoDB
+* Persistent ChromaDB storage
+
+---
+
+# Current Status
+
+## Backend Status
+
+Production-oriented backend complete.
+
+Implemented:
+
+* Multi-agent research workflow
+* Hybrid retrieval
+* Evidence-backed fact verification
+* Deterministic citations
+* Hierarchical reporting
+* Retrieval evaluation
+* Evidence evaluation
+* Historical evaluation persistence
+* Dockerization
+* High-resolution observability metrics
+
+---
+
+# Future Work
+
+Planned enhancements include:
+
+* GitHub Actions CI/CD
+* Documentation website
+* Evaluation dashboards
+* Frontend interface
+* Cloud deployment
+
+---
+
+# License
+
+This project is intended for educational, research, and portfolio purposes.
